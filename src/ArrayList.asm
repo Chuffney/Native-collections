@@ -60,7 +60,7 @@ ArrayListCopy:
     sub rsp, 0x20
     mov rbx, rcx
     mov ecx, [rcx + List.size]
-    call ArrayList8capacity
+    call ArrayListCapacity
     mov rdx, [rbx + List.arrayPtr]
     mov rcx, [rax + List.arrayPtr]
     mov r8d, [rbx + List.size]
@@ -172,7 +172,7 @@ LIO_ret:
 
 
 AL_clone:
-    jmp ArrayList8copy
+    jmp ArrayListCopy
 
 AL_toArray:
     push rcx

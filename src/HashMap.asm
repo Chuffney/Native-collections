@@ -16,8 +16,18 @@ global HM_defaultEquals
 
 global HashMapDefault
 global HashMapCapacity
+global HashMapCapLF
+global HM_clear
+global HM_containsKey
+global HM_containsValue
+global HM_get
+global HM_getOrDefault
+global HM_isEmpty
 global HM_put
+global HM_putIfAbsent
 global HM_remove
+global HM_size
+global HM_free
 
 defaultSize:    equ 16
 defaultResize:  equ 12
@@ -416,120 +426,69 @@ PUT_ret:
     ret
 
 HM_remove:
-    mov rbx, rcx
-    mov rax, [rcx + Map.nodesPtr]
-    mov rdi, rax
-    lea rsi, [rax + 24]
-    call moveNode
-
     push rbx
-    push rbp
     mov rbx, rcx
-    mov rbp, rdx
     call getNode
     jz REM_retShallow
     push rdi
     push rsi
+    push rbp
+    push r15
     mov rdi, rax
-    call getMappedBucket
-    cmp rax, rdi
-    jne REM_loop0Control
-    mov rdx, [rdi + Node.nextNode]
-    mov [rcx], rdx
-    jmp REM_loop0Collect
-REM_loop0:
-        cmp rax, rdi
-        je REM_bypassRemovedNode
-        lea rcx, [rax + Node.nextNode]
-REM_loop0Control:
-        mov rax, [rcx]
-        jmp REM_loop0
-REM_bypassRemovedNode:
-    mov rdx, [rdi + Node.nextNode]
-    mov [rcx], rdx
-REM_loop0Collect:
-    mov ecx, [rbx + Map.size]
-    dec ecx
-    mov [rbx + Map.size], ecx
-    mov rax, [rbx + Map.nodesPtr]
+    mov rsi, [rbx + Map.nodesPtr]
+    mov eax, [rbx + Map.size]
+    dec eax
+    mov [rbx + Map.size], eax
 %if Node_size != 24
     %error "Node size changed"
 %endif
-    lea rcx, [rcx + rcx * 2] ;rcx * 3
-    lea rsi, [rax + rcx * 8] ;the last node
-    mov rdx, [rsi + Node.key]
+    lea rax, [rax + rax * 2]    ;size * 3
+    lea rsi, [rsi + rax * 8]    ;last node ptr
+
+    mov rbp, [rdi + Node.key]
+    mov r15, [rdi + Node.nextNode]
+    ;moveNode
+    cmp rsi, rdi
+    je REM_MN_ret
+
+%if Node_size != 24
+    %error "Node size changed"
+%endif
     mov ecx, 3
-    rep movsq   ;move the last node to where the removed node is
-    mov rcx, rbx
-    call getMappedBucket
-    jz REM_retDeep
+    rep movsq
     sub rsi, Node_size
-    cmp rax, rsi
-    jne REM_loop1Control
-REM_loop1:
-        cmp rax, rsi
-        ;je eq
+    sub rdi, Node_size
+REM_MN_ret:
+    ;end moveNode
+    call getMappedBucket    ;the removed key is still in rbp
+    cmp rax, rdi
+    je REM_loop0collect
+REM_loop0:
         lea rcx, [rax + Node.nextNode]
-REM_loop1Control:
         mov rax, [rcx]
-        jmp REM_loop1
-REM_loop1Collect:
+        cmp rax, rdi
+        jne REM_loop0
+REM_loop0collect:
+    mov [rcx], r15
 
-    ;mov rdx, [rsi + Node.
+    mov rbp, [rsi + Node.key]
+    call getMappedBucket
+    cmp rax, rsi
+    je REM_loop1collect
+    REM_loop1:
+        lea rcx, [rax + Node.nextNode]
+        mov rax, [rcx]
+        cmp rax, rsi
+        jne REM_loop1
+REM_loop1collect:
+    mov [rcx], rdi
 
-
-REM_retDeep:
+    pop r15
+    pop rbp
     pop rsi
     pop rdi
 REM_retShallow:
-    pop rbp
     pop rbx
-    ret
-
-moveNode:   ;map ptr in rbx, nodes in rsi (source) and rdi (destination)
-    push rbp
-    push r15
-    xor r15d, r15d
-MN_repeat:
-    mov rbp, [rdi + Node.key]
-    call getMappedBucket
-    cmp rax, rdi
-    jne MN_loop
-    test r15b, r15b
-    jz MN_bucketDst
-    ;MN_bucketSrc:
-    mov [rcx], rsi
-    jmp MN_collect
-    MN_bucketDst:
-    xor edx, edx
-    mov [rcx], rdx
-    jmp MN_collect
-MN_loop:
-        lea rcx, [rax + Node.nextNode]
-        cmp rcx, rdi
-        je MN_bypass
-        mov rax, [rcx]
-        jmp MN_loop
-MN_bypass:
-    test r15b, r15b
-    jz MN_bypassDst
-    ;bypassSrc
-    mov [rcx], rdi
-    jmp MN_collect
-MN_bypassDst:
-    mov rdx, [rdi + Node.nextNode]
-    mov [rcx], rdx
-
-MN_collect:
-    inc r15d
-    xchg rdi, rsi
-    cmp r15b, 1
-    je MN_repeat
-
-    mov ecx, 3
-    rep movsq
-    pop r15
-    pop rbp
     ret
 
 HM_size:
